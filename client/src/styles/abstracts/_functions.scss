@@ -1,0 +1,109 @@
+// Convert px to rem
+@function rem($pixels, $context: 16) {
+  @return ($pixels / $context) * 1rem;
+}
+
+// Convert px to em
+@function em($pixels, $context: 16) {
+  @return ($pixels / $context) * 1em;
+}
+
+// Strip unit from number
+@function strip-unit($number) {
+  @if type-of($number) == "number" and not unitless($number) {
+    @return $number / ($number * 0 + 1);
+  }
+  @return $number;
+}
+
+// Color functions
+@function tint($color, $percentage) {
+  @return mix(white, $color, $percentage);
+}
+
+@function shade($color, $percentage) {
+  @return mix(black, $color, $percentage);
+}
+
+// Z-index function
+@function z($layer) {
+  $z-layers: (
+    "negative": -1,
+    "base": 1,
+    "above": 2,
+    "header": 100,
+    "nav": 200,
+    "dropdown": 300,
+    "modal": 400,
+    "toast": 500
+  );
+
+  @if map-has-key($z-layers, $layer) {
+    @return map-get($z-layers, $layer);
+  }
+
+  @warn 'No z-index found for `#{$layer}` in $z-layers map.';
+  @return null;
+}
+
+// Get color from theme
+@function theme-color($key) {
+  @if map-has-key($theme-colors, $key) {
+    @return map-get($theme-colors, $key);
+  }
+
+  @warn 'Unknown `#{$key}` in $theme-colors.';
+  @return null;
+}
+
+// Calculate fluid font size
+@function fluid-type($min-vw, $max-vw, $min-font-size, $max-font-size) {
+  $unit1: unit($min-vw);
+  $unit2: unit($max-vw);
+  $unit3: unit($min-font-size);
+  $unit4: unit($max-font-size);
+
+  @if $unit1 == $unit2 and $unit3 == $unit4 {
+    $slope: ($max-font-size - $min-font-size) / ($max-vw - $min-vw);
+    $base: $min-font-size - $slope * $min-vw;
+
+    @return clamp(
+      #{$min-font-size},
+      #{$slope * 100}vw + #{$base},
+      #{$max-font-size}
+    );
+  }
+
+  @warn "Incompatible units: #{$unit1}, #{$unit2}, #{$unit3}, #{$unit4}";
+  @return $min-font-size;
+}
+
+// Get spacing value
+@function spacing($key) {
+  $spacers: (
+    "xs": $spacing-xs,
+    "sm": $spacing-sm,
+    "md": $spacing-md,
+    "lg": $spacing-lg,
+    "xl": $spacing-xl
+  );
+
+  @if map-has-key($spacers, $key) {
+    @return map-get($spacers, $key);
+  }
+
+  @warn 'Unknown spacing `#{$key}` in $spacers map.';
+  @return null;
+}
+
+// Usage examples:
+// .element {
+//   font-size: rem(16);
+//   margin: spacing('md');
+//   z-index: z('dropdown');
+//   background-color: tint($primary-color, 20%);
+// }
+
+// .responsive-text {
+//   font-size: fluid-type(320px, 1200px, 16px, 24px);
+// }

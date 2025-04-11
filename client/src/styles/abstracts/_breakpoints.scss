@@ -1,0 +1,58 @@
+// Breakpoint variables
+$breakpoints: (
+  "xs": 320px,
+  "sm": 640px,
+  "md": 768px,
+  "lg": 1024px,
+  "xl": 1280px,
+  "2xl": 1536px
+);
+
+// Breakpoint mixins
+@mixin breakpoint-up($size) {
+  @media (min-width: map-get($breakpoints, $size)) {
+    @content;
+  }
+}
+
+@mixin breakpoint-down($size) {
+  @media (max-width: (map-get($breakpoints, $size) - 1px)) {
+    @content;
+  }
+}
+
+@mixin breakpoint-between($min, $max) {
+  @media (min-width: map-get($breakpoints, $min)) and (max-width: (map-get($breakpoints, $max) - 1px)) {
+    @content;
+  }
+}
+
+// Usage example:
+// .element {
+//   @include breakpoint-up('md') {
+//     display: flex;
+//   }
+// }
+
+@mixin breakpoint-only($size) {
+  $sizes: map-keys($breakpoints);
+  $index: index($sizes, $size);
+
+  @if $index != null and $index < length($sizes) {
+    $next: nth($sizes, $index + 1);
+    @include breakpoint-between($size, $next) {
+      @content;
+    }
+  } @else {
+    @include breakpoint-up($size) {
+      @content;
+    }
+  }
+}
+
+// Usage example:
+// .element {
+//   @include breakpoint-only('md') {
+//      Only between md and lg
+//   }
+// }

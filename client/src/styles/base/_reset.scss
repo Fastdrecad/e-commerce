@@ -1,0 +1,113 @@
+// Modern CSS Reset
+
+// Box sizing
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+// Remove default margin
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+article,
+aside,
+footer,
+header,
+nav,
+section {
+  display: block;
+}
+
+// Set core body defaults
+body {
+  min-height: 100vh;
+  scroll-behavior: smooth;
+  text-rendering: optimizeSpeed;
+  line-height: 1.5;
+  font-family: $font-family-primary;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Remove list styles on ul, ol elements
+ul,
+ol {
+  list-style: none;
+}
+
+// Make images easier to work with
+img,
+picture {
+  max-width: 100%;
+  display: block;
+}
+
+// Inherit fonts for inputs and buttons
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+// Remove all animations and transitions for people that prefer not to see them
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// Remove default button styles
+button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+// Remove text decoration from links
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+// Make sure textareas without a rows attribute are not tiny
+textarea {
+  min-height: 3em;
+}
+
+// Custom selection color
+::selection {
+  background-color: $primary-color;
+  color: $text-light;
+}
+
+svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+[hidden] {
+  display: none !important;
+}
