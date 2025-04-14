@@ -1,27 +1,26 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/**
- * Attribute Base Access Control
- * Here we define what access control will look like.
- * Calling hasPermission() we check if user has permission to access resource.
- */
+import { selectUser } from "@/features/auth/authSlice";
+import { User } from "@/types/user/user";
+import { useMemo } from "react";
+import { useAppSelector } from "@/store/hooks";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type User = {
-  uid: string;
-  isAuthenticated?: boolean;
-  roles: Role[];
-  data: {
-    firstName?: string;
-    lastName?: string;
-    displayName: string;
-    photoURL?: string;
-    email?: string;
-    loginRedirectUrl?: string;
+export type Role = "SUPER_ADMIN" | "CUSTOMER" | "GUEST" | "ORDER_MANAGER";
+
+type CRUDOperations = "view" | "create" | "update" | "delete";
+
+type Permissions = {
+  APP: {
+    dataType: object;
+    action: CRUDOperations;
+  };
+  BILLING_AND_PAYMENT: {
+    dataType: unknown;
+    action: CRUDOperations;
+  };
+  ADD_NEW_ROLE: {
+    dataType: unknown;
+    action: CRUDOperations;
   };
 };
-
-// Role types
-export type Role = "ADMIN";
 
 type PermissionCheck<Key extends keyof Permissions> =
   | boolean
@@ -30,39 +29,52 @@ type PermissionCheck<Key extends keyof Permissions> =
 type RolesWithPermissions = {
   [R in Role]: Partial<{
     [Key in keyof Permissions]: Partial<{
-      [Action in Permissions[Key]["action"]]: PermissionCheck<Key>;
+      [Action in CRUDOperations]: PermissionCheck<Key>;
     }>;
   }>;
 };
 
-type Permissions = {
-  APP: {
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-    dataType: {};
-    action: "view";
-  };
-};
-
-// Role permissions - EDITOR
+// Role permissions
 const EDITOR = {
   view: true,
   create: true,
   update: true,
-  delete: true,
+  delete: true
 };
 
-// Role permissions - VIEWER
 const VIEWER = {
   view: true,
   create: false,
   update: false,
-  delete: false,
+  delete: false
+};
+
+const CREATE_ONLY = {
+  view: true,
+  create: true,
+  update: false,
+  delete: false
 };
 
 const ROLES = {
-  ADMIN: {
+  SUPER_ADMIN: {
     APP: EDITOR,
+    BILLING_AND_PAYMENT: EDITOR,
+    ADD_NEW_ROLE: EDITOR
   },
+  GUEST: {
+    APP: VIEWER,
+    BILLING_AND_PAYMENT: VIEWER,
+    ADD_NEW_ROLE: VIEWER
+  },
+  ORDER_MANAGER: {
+    APP: CREATE_ONLY,
+    BILLING_AND_PAYMENT: CREATE_ONLY
+  },
+  CUSTOMER: {
+    APP: CREATE_ONLY,
+    BILLING_AND_PAYMENT: VIEWER
+  }
 } as const satisfies RolesWithPermissions;
 
 /**
@@ -74,20 +86,50 @@ const ROLES = {
  * @returns
  */
 export function hasPermission<Resource extends keyof Permissions>(
-  user: User,
+  user: User | null,
   resource: Resource,
-  action: Permissions[Resource]["action"],
+  action: CRUDOperations,
   data?: Permissions[Resource]["dataType"]
-) {
-  return user.roles.some((role) => {
-    if (!ROLES[role]) return false;
+): boolean {
+  return (
+    user?.roles.some((role) => {
+      const permission = (ROLES as RolesWithPermissions)[role]?.[resource]?.[
+        action
+      ];
+      if (permission == null) return false;
 
-    const permission = (ROLES as RolesWithPermissions)[role][resource]?.[
-      action
-    ];
-    if (permission == null) return false;
-
-    if (typeof permission === "boolean") return permission;
-    return data != null && permission(user, data);
-  });
+      return typeof permission === "function"
+        ? permission(user, data!)
+        : permission;
+    }) ?? false
+  );
 }
+
+/**
+ * Method to check  if users have view, create, update, and delete permissions for specific features.
+ * @param feature
+ * @returns
+ */
+export const useHasPermission = (feature: keyof Permissions) => {
+  const user = useAppSelector(selectUser);
+
+  const permissions = useMemo(() => {
+    if (!user) {
+      return {
+        canCreate: false,
+        canUpdate: false,
+        canView: false,
+        canDelete: false
+      };
+    }
+
+    return {
+      canCreate: hasPermission(user, feature, "create"),
+      canUpdate: hasPermission(user, feature, "update"),
+      canView: hasPermission(user, feature, "view"),
+      canDelete: hasPermission(user, feature, "delete")
+    };
+  }, [user, feature]);
+
+  return permissions;
+};

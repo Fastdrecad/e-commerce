@@ -12,28 +12,31 @@
     "test": "jest"
   },
   "dependencies": {
+    "@types/cookie-parser": "^1.4.8",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20.11.24",
     "@types/nodemailer": "^6.4.17",
     "@types/passport": "^1.0.17",
     "axios": "^1.8.4",
-    "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "compression": "^1.7.4",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.3",
     "express-validator": "^7.0.1",
+    "gaxios": "^6.7.1",
     "google-auth-library": "^9.15.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.2",
     "morgan": "^1.10.0",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^6.10.0",
     "passport": "^0.7.0",
     "rate-limiter-flexible": "^7.0.0",
-    "z": "^1.0.9",
+    "z": "^1.0.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -42,6 +45,7 @@
     "@types/cors": "^2.8.17",
     "@types/jest": "^29.5.12",
     "@types/morgan": "^1.9.9",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.1.0",
     "@typescript-eslint/parser": "^7.1.0",
     "eslint": "^8.57.0",
@@ -51,6 +55,6 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.8.3"
   }
 }

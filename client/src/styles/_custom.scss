@@ -1,0 +1,66 @@
+@use "./abstracts/variables" as *;
+@use "./abstracts//mixins" as *;
+
+.register-form,
+.login-form {
+  &__header {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  &__disclaimer {
+    font-size: $font-size-sm;
+  }
+
+  &__logo {
+    font-size: 2.5rem;
+    margin: 0 !important;
+    display: inline;
+    white-space: nowrap;
+    font-weight: $font-weight-light;
+    font-family: "TheQueenThine";
+  }
+
+  // LOGIN FORM
+
+  &__back-button {
+    color: rgb(88, 1, 175);
+    font-weight: $font-weight-semibold;
+    position: relative;
+    text-decoration: none;
+    transition: color $layout-transition-speed;
+
+    &::after {
+      content: "";
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      bottom: -2px;
+      left: 0;
+      background-color: rgb(88, 1, 175);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform $layout-transition-speed ease-in-out;
+    }
+
+    &:hover {
+      color: rgb(88, 1, 175);
+
+      &::after {
+        transform: scaleX(1);
+      }
+    }
+  }
+}
+
+.input-adornment {
+  position: absolute;
+  right: 20px;
+  top: 40%;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

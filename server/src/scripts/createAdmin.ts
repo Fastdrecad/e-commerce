@@ -22,7 +22,7 @@ const createAdminUser = async () => {
     await mongoose.connect(process.env.MONGO_URI!);
     console.log("Successfully connected to database.");
 
-    const existingAdmin = await User.findOne({ role: ROLES.Admin });
+    const existingAdmin = await User.findOne({ role: ROLES.SUPER_ADMIN });
     if (existingAdmin) {
       console.log("Admin user already exists:");
       console.log(`- Email: ${existingAdmin.email}`);
@@ -49,8 +49,8 @@ const createAdminUser = async () => {
       lastName,
       email,
       password,
-      provider: EMAIL_PROVIDER.Email,
-      role: ROLES.Admin,
+      provider: EMAIL_PROVIDER.EMAIL,
+      role: ROLES.SUPER_ADMIN,
       isEmailVerified: true
     });
 

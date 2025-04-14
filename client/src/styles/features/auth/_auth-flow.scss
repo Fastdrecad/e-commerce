@@ -1,0 +1,147 @@
+.auth-flow {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: $spacing-xl;
+}
+
+.email-auth,
+.login-form,
+.register-form {
+  &__container {
+    width: 100%;
+  }
+
+  &__header {
+    margin-bottom: $spacing-xl;
+    width: 100%;
+  }
+
+  &__logo {
+    font-family: $font-family-queen;
+    font-size: $font-size-2xl;
+    margin-bottom: $spacing-md;
+    color: $primary-color;
+  }
+
+  &__title {
+    font-size: $font-size-xl;
+    font-weight: $font-weight-semibold;
+    margin-bottom: $spacing-sm;
+  }
+
+  &__email {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+
+  &__divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: $spacing-xl 0;
+    color: $text-secondary;
+
+    &::before,
+    &::after {
+      content: "";
+      flex: 1;
+      border-bottom: $border-primary;
+    }
+
+    span {
+      padding: 0 $spacing-md;
+    }
+  }
+
+  &__oauth-buttons {
+    display: flex;
+    gap: $spacing-md;
+    width: 100%;
+    margin-bottom: $spacing-xl;
+  }
+
+  &__back-button {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    margin-top: $spacing-md;
+    color: $text-secondary;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: $font-size-sm;
+
+    &:hover {
+      color: $primary-color;
+    }
+  }
+}
+
+.oauth-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
+  flex: 1;
+  padding: $spacing-md;
+  border: $border-primary;
+  border-radius: $border-radius-md;
+  background: none;
+  cursor: pointer;
+  font-size: $font-size-sm;
+  color: $text-primary;
+
+  &:hover {
+    background-color: $bg-secondary;
+  }
+}
+
+.oauth-buttons-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  .oauth-button {
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+
+    &:hover:not(:disabled) {
+      background-color: rgba(0, 0, 0, 0.05);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+  }
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--bs-gray-600);
+  font-size: 0.875rem;
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid var(--bs-gray-300);
+  }
+
+  &::before {
+    margin-right: 0.5rem;
+  }
+
+  &::after {
+    margin-left: 0.5rem;
+  }
+
+  span {
+    padding: 0 0.5rem;
+  }
+}

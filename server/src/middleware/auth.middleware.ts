@@ -39,3 +39,28 @@ export const authMiddleware = (
     res.status(401).json({ message: "Token is not valid" });
   }
 };
+
+/**
+ * Extracts refresh token from either cookies or authorization header
+ * This ensures backward compatibility with clients still using the old token-in-header approach
+ */
+export const extractRefreshToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // First check if token is in cookie
+  if (req.cookies && req.cookies.refreshToken) {
+    req.body.refreshToken = req.cookies.refreshToken;
+  }
+  // If not, check if token is in request body (for backward compatibility)
+  else if (!req.body.refreshToken) {
+    // Check authorization header as a fallback
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      req.body.refreshToken = authHeader.split(" ")[1];
+    }
+  }
+
+  next();
+};

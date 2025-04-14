@@ -47,26 +47,6 @@
   padding: 0 $container-padding;
 }
 
-// Button mixin
-@mixin button-variant($bg-color, $text-color: $text-light, $hover-darken: 10%) {
-  background-color: $bg-color;
-  color: $text-color;
-  border: none;
-  border-radius: $border-radius-md;
-  padding: $spacing-sm $spacing-md;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: darken($bg-color, $hover-darken);
-  }
-
-  &:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-}
-
 // Card mixin
 @mixin card($padding: $spacing-md, $radius: $border-radius-md) {
   background-color: $bg-primary;

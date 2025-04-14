@@ -5,9 +5,11 @@ import {
   loginSchema,
   resetPasswordSchema,
   forgotPasswordSchema,
-  verifyEmailSchema
+  verifyEmailSchema,
+  checkEmailSchema
 } from "../schemas/auth.schemas";
 import { validateRequest } from "../middleware/validateRequest";
+import { extractRefreshToken } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -18,6 +20,11 @@ router.post(
   authController.register
 );
 router.post("/login", validateRequest(loginSchema), authController.login);
+router.get(
+  "/check-email",
+  validateRequest(checkEmailSchema),
+  authController.checkEmailExists
+);
 router.post(
   "/forgot-password",
   validateRequest(forgotPasswordSchema),
@@ -28,19 +35,19 @@ router.post(
   validateRequest(resetPasswordSchema),
   authController.resetPassword
 );
-router.post("/refresh-token", authController.refreshToken);
+router.post("/refresh-token", extractRefreshToken, authController.refreshToken);
 router.get(
   "/verify-email/:token",
   validateRequest(verifyEmailSchema),
   authController.verifyEmail
 );
-router.post("/logout", authController.logout);
+router.post("/logout", extractRefreshToken, authController.logout);
 router.post("/resend-verification", authController.resendVerificationEmail);
 
 // Social auth routes
-router.post("/google", authController.googleAuth);
-router.post("/facebook", authController.facebookAuth);
-router.post("/apple", authController.appleAuth);
+router.post("/oauth/google", authController.googleAuth);
+router.post("/oauth/facebook", authController.facebookAuth);
+router.post("/oauth/apple", authController.appleAuth);
 
 // Development testing routes
 if (process.env.NODE_ENV === "development") {

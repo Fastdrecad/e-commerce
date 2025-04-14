@@ -1,0 +1,38 @@
+.email-verification {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background-color: var(--color-background);
+
+  &__container {
+    max-width: 500px;
+    width: 100%;
+    padding: 2rem;
+    background-color: var(--color-surface);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  &__title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  &__status {
+    text-align: center;
+    color: var(--color-text);
+    margin-bottom: 1.5rem;
+
+    p {
+      font-size: 1.1rem;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+  }
+}
