@@ -1,25 +1,25 @@
 import axios from "axios";
 
+// Modify this key to match how you store tokens
 const apiUrl = import.meta.env.VITE_API_URL;
-const tokenStorageKey = "config.tokenStorageKey";
 
 const axiosInstance = axios.create({
-  baseURL: apiUrl,
+  baseURL: apiUrl
 });
 
-// Request interceptor
-axiosInstance.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem(tokenStorageKey);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+export const setBearerToken = (token: string) => {
+  axiosInstance.interceptors.request.use(
+    (config) => {
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  );
+};
 
 // Response interceptor
 axiosInstance.interceptors.response.use(
