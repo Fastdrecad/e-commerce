@@ -1,0 +1,159 @@
+@use "../abstracts/variables" as *;
+@use "../abstracts/mixins" as *;
+@use "sass:color";
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="file"],
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background-color: $white-color;
+  cursor: text;
+  outline: none;
+  border: $border-primary;
+  box-sizing: border-box;
+
+  &:focus {
+    box-shadow: $border-inner;
+  }
+
+  &:disabled {
+    border: none !important;
+    cursor: not-allowed;
+  }
+}
+
+.input-box,
+.select-box {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+
+  .input-wrapper {
+    position: relative;
+    width: 100%;
+  }
+
+  .password-toggle {
+    display: flex;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: $gray-color;
+    transition: color $layout-transition-speed;
+
+    &:hover {
+      color: $black-color;
+    }
+
+    span {
+      font-size: 1.75em !important;
+    }
+  }
+
+  .invalid-message {
+    position: absolute;
+    bottom: -1.9em;
+    left: 0;
+    right: 0;
+    color: $error-color;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-semibold;
+    opacity: 0;
+    visibility: hidden;
+    height: 1.5em;
+    line-height: 1;
+  }
+
+  &.invalid {
+    .input-text,
+    textarea,
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="file"] {
+      box-shadow: $border-inner-error;
+      border: $border-primary-error;
+    }
+
+    label {
+      background-color: $error-color;
+      color: $white-color;
+      border: $border-primary-error;
+      border-bottom: none;
+      box-shadow: $border-inner-error;
+    }
+
+    .invalid-message {
+      opacity: 1;
+      visibility: visible;
+    }
+  }
+
+  &.invalid:has(input:hover) {
+    input {
+      border: $border-primary;
+      box-shadow: none;
+    }
+
+    label {
+      background-color: $black-color;
+      color: $white-color;
+      border: $border-primary;
+      border-bottom: none;
+      box-shadow: none;
+    }
+  }
+}
+
+.input-box {
+  margin: 20px 0px;
+  height: 100%;
+
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  input[type="file"] {
+    height: 100%;
+  }
+
+  label {
+    padding: 4px 8px;
+    font-weight: $font-weight-medium;
+    font-size: $font-size-xs;
+    border: $border-primary;
+    border-bottom: none;
+    width: fit-content;
+  }
+}
+
+.input-box:has(input:hover) {
+  label {
+    background: $gray-color;
+    color: $black-color;
+    border: $border-primary;
+    border-bottom: none;
+  }
+}
+
+.input-box:has(input:focus) {
+  label {
+    background: $black-color;
+    color: $white-color;
+    box-shadow: $border-inner;
+  }
+}
+
+.input-box:has(input:invalid) {
+  label {
+    background: $error-color;
+    color: $white-color;
+  }
+}

@@ -1,3 +1,5 @@
+@use "sass:map";
+
 // Breakpoint variables
 $breakpoints: (
   "xs": 320px,
@@ -10,19 +12,19 @@ $breakpoints: (
 
 // Breakpoint mixins
 @mixin breakpoint-up($size) {
-  @media (min-width: map-get($breakpoints, $size)) {
+  @media (min-width: map.get($breakpoints, $size)) {
     @content;
   }
 }
 
 @mixin breakpoint-down($size) {
-  @media (max-width: (map-get($breakpoints, $size) - 1px)) {
+  @media (max-width: (map.get($breakpoints, $size) - 1px)) {
     @content;
   }
 }
 
 @mixin breakpoint-between($min, $max) {
-  @media (min-width: map-get($breakpoints, $min)) and (max-width: (map-get($breakpoints, $max) - 1px)) {
+  @media (min-width: map.get($breakpoints, $min)) and (max-width: (map.get($breakpoints, $max) - 1px)) {
     @content;
   }
 }
@@ -35,7 +37,7 @@ $breakpoints: (
 // }
 
 @mixin breakpoint-only($size) {
-  $sizes: map-keys($breakpoints);
+  $sizes: map.keys($breakpoints);
   $index: index($sizes, $size);
 
   @if $index != null and $index < length($sizes) {

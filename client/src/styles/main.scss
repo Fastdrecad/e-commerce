@@ -1,22 +1,26 @@
-@import "bootstrap/scss/bootstrap";
+@use "./vendors/normalize";
+@use "./abstracts/variables" as *;
 
-@import "vendors/normalize";
-
-// Abstracts
-@import "abstracts/variables";
-@import "abstracts/functions";
-@import "abstracts/mixins";
-@import "abstracts/breakpoints";
+// // Abstracts
+@use "./abstracts" as *;
 
 // Base
-@import "base/reset";
-@import "base/typography";
-@import "base/animations";
+@use "./base/fonts";
+@use "./base/reset";
+@use "./base/typography";
+@use "./base/animations";
 
-// Layout
-@import "layout/header";
-@import "layout/footer";
+// // Layout
+@use "./layout/header";
+@use "./layout/footer";
 
 // Components
-
+@use "./components/form-input";
+@use "./components/button";
+@use "./components/custom-link";
+@use "./components/email-verification";
+@use "./components/email-verification-message";
 // Pages
+
+// Custom
+@use "./custom";

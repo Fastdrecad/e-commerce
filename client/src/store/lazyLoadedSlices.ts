@@ -6,5 +6,5 @@ import { authSlice } from "@/features/auth/authSlice";
 export interface LazyLoadedSlices {}
 
 export const rootReducer = combineSlices(appSlice, authSlice, {
-  [baseApi.reducerPath]: baseApi.reducer,
+  [baseApi.reducerPath]: baseApi.reducer
 }).withLazyLoadedSlices<LazyLoadedSlices>();

@@ -1,0 +1,14 @@
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: $bg-primary;
+  padding: $spacing-xl;
+
+  &__container {
+    width: 100%;
+    max-width: $container-max-width;
+    margin: 0 auto;
+  }
+}

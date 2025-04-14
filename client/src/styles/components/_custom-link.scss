@@ -1,0 +1,52 @@
+@use "../abstracts/variables" as *;
+@use "../abstracts/mixins" as *;
+
+.custom-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  color: rgb(88, 1, 175);
+  font-weight: $font-weight-semibold;
+  position: relative;
+  text-decoration: none;
+  transition: color $layout-transition-speed;
+
+  &::after {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    bottom: -2px;
+    left: 0;
+    background-color: rgb(88, 1, 175);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform $layout-transition-speed ease-in-out;
+  }
+
+  &:hover {
+    color: rgb(88, 1, 175);
+
+    &::after {
+      transform: scaleX(1);
+    }
+  }
+
+  &.disabled {
+    color: $gray-color;
+    pointer-events: none;
+    cursor: not-allowed;
+  }
+
+  .link-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &.with-icon {
+    gap: 0.5rem;
+  }
+}

@@ -1,10 +1,4 @@
-import mongoose, {
-  Schema,
-  Document,
-  Model,
-  CallbackError,
-  Types
-} from "mongoose";
+import mongoose, { Schema, Document, CallbackError, Types } from "mongoose";
 import bcrypt from "bcryptjs";
 import { EMAIL_PROVIDER, ROLES } from "../constants";
 import crypto from "crypto";
@@ -28,6 +22,11 @@ export interface IUser {
   passwordChangedAt?: Date;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  isActive: boolean;
+  deactivatedAt?: Date;
+  deactivatedBy?: mongoose.Types.ObjectId;
+  deactivationReason?: string;
+  adminNotes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,6 +38,8 @@ export interface IUserMethods {
   matchPassword(enteredPassword: string): Promise<boolean>;
   changedPasswordAfter(JWTTimestamp: number): boolean;
   createPasswordResetToken(): string;
+  softDelete(adminId?: string, reason?: string): Promise<void>;
+  restore(): Promise<void>;
 }
 
 // Define the user document type (combination of IUser, Document and methods)
@@ -64,7 +65,7 @@ const userSchema = new Schema<UserDocument>(
     email: {
       type: String,
       required: function (this: UserDocument) {
-        return this.provider === EMAIL_PROVIDER.Email;
+        return this.provider === EMAIL_PROVIDER.EMAIL;
       },
       lowercase: true,
       trim: true,
@@ -79,8 +80,10 @@ const userSchema = new Schema<UserDocument>(
     provider: {
       type: String,
       required: true,
-      default: EMAIL_PROVIDER.Email,
-      enum: Object.values(EMAIL_PROVIDER)
+      default: EMAIL_PROVIDER.EMAIL,
+      enum: Object.values(EMAIL_PROVIDER),
+      lowercase: true,
+      trim: true
     },
     wishlist: [{ type: Schema.Types.ObjectId, ref: "Product" }],
     googleId: {
@@ -97,7 +100,7 @@ const userSchema = new Schema<UserDocument>(
     },
     role: {
       type: String,
-      default: ROLES.Member,
+      default: ROLES.CUSTOMER,
       enum: Object.values(ROLES)
     },
     isEmailVerified: {
@@ -113,7 +116,26 @@ const userSchema = new Schema<UserDocument>(
       type: Date
     },
     passwordResetToken: String,
-    passwordResetExpires: Date
+    passwordResetExpires: Date,
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true
+    },
+    deactivatedAt: {
+      type: Date
+    },
+    deactivatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User"
+    },
+    deactivationReason: {
+      type: String
+    },
+    adminNotes: {
+      type: String,
+      select: false // Only accessible when explicitly requested
+    }
   },
   {
     timestamps: true,
@@ -193,7 +215,7 @@ userSchema.methods.createPasswordResetToken = function (
 userSchema.pre(
   "save",
   async function (this: UserDocument, next: (err?: CallbackError) => void) {
-    if (this.provider === EMAIL_PROVIDER.Email) {
+    if (this.provider === EMAIL_PROVIDER.EMAIL) {
       const existingUser = await User.exists({
         email: this.email,
         _id: { $ne: this._id }
@@ -234,8 +256,56 @@ userSchema.pre(
   }
 );
 
+// Add a pre-save hook to ensure provider is lowercase
+userSchema.pre(
+  "save",
+  function (this: UserDocument, next: (err?: CallbackError) => void) {
+    if (this.provider) {
+      this.provider = this.provider.toLowerCase();
+    }
+    next();
+  }
+);
+
 // Add indexes
 userSchema.index({ email: 1 }, { unique: true });
+
+// Add a query middleware to exclude inactive users by default
+userSchema.pre(/^find/, function (this: any, next) {
+  // Include inactive users only when explicitly asked for
+  if (this.getOptions().includeInactive !== true) {
+    this.find({ isActive: { $ne: false } });
+  }
+  next();
+});
+
+// Method to soft delete a user
+userSchema.methods.softDelete = async function (
+  this: UserDocument,
+  adminId?: string,
+  reason?: string
+): Promise<void> {
+  this.isActive = false;
+  this.deactivatedAt = new Date();
+  if (adminId) {
+    this.deactivatedBy = new mongoose.Types.ObjectId(adminId);
+  }
+  if (reason) {
+    this.deactivationReason = reason;
+  }
+  await this.save();
+};
+
+// Method to restore a soft-deleted user
+userSchema.methods.restore = async function (
+  this: UserDocument
+): Promise<void> {
+  this.isActive = true;
+  this.deactivatedAt = undefined;
+  this.deactivatedBy = undefined;
+  this.deactivationReason = undefined;
+  await this.save();
+};
 
 // Export the model with proper typing
 export const User = mongoose.model<UserDocument>("User", userSchema);

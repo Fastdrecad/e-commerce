@@ -1,0 +1,191 @@
+@use "../abstracts/variables" as *;
+@use "../abstracts/mixins" as *;
+@use "sass:color";
+
+.input-btn {
+  // Base styles
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
+  border: none;
+  background: transparent;
+  font-size: inherit;
+  font-weight: $font-weight-medium;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all $layout-transition-speed;
+  padding: 10px 16px;
+  min-width: fit-content;
+  position: relative;
+
+  &:focus {
+    outline: none;
+  }
+
+  &:active {
+    outline: none;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: gray;
+    border-color: transparent !important;
+    pointer-events: none;
+  }
+
+  &:hover {
+    background-color: $white-color;
+    .btn-text {
+      color: $black-color;
+    }
+  }
+
+  // Text styles
+  .btn-text {
+    color: $white-color;
+    text-transform: capitalize;
+  }
+
+  // Icon styles
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // Size variants
+  &.small {
+    padding: 6px 10px;
+    min-width: 100px;
+    font-size: $font-size-xs;
+  }
+
+  &.medium {
+    padding: 10px 16px;
+    min-width: 135px;
+    font-size: $font-size-base;
+  }
+
+  &.large {
+    padding: 12px 20px;
+    min-width: 160px;
+    font-size: $font-size-lg;
+  }
+
+  // Width variants
+  &.full-width {
+    width: 100%;
+  }
+
+  // Icon only variants
+  &.icon-only {
+    padding: 0;
+    min-width: auto;
+    aspect-ratio: 1;
+
+    &.small {
+      width: 22px;
+      height: 22px;
+    }
+
+    &.medium {
+      width: 30px;
+      height: 30px;
+    }
+
+    &.large {
+      width: 40px;
+      height: 40px;
+    }
+  }
+
+  // Variant styles
+  &.custom-btn-primary {
+    background-color: $primary-color;
+    color: $white-color;
+    border: $border-primary;
+
+    &:hover:not(:disabled) {
+      background-color: $gray-color;
+    }
+  }
+
+  &.custom-btn-secondary {
+    background-color: $secondary-color;
+    color: $white-color;
+
+    &:hover:not(:disabled) {
+      background-color: color.adjust($secondary-color, $lightness: -10%);
+    }
+  }
+
+  &.custom-btn-danger {
+    background-color: $error-color;
+    color: $white-color;
+
+    &:hover:not(:disabled) {
+      background-color: color.adjust($error-color, $lightness: -10%);
+    }
+  }
+
+  &.custom-btn-link {
+    background: transparent;
+    color: $primary-color;
+    text-decoration: underline;
+
+    &:hover:not(:disabled) {
+      color: color.adjust($primary-color, $lightness: -10%);
+    }
+  }
+
+  &.custom-btn-dark {
+    background-color: $bg-dark;
+    color: $white-color;
+
+    &:hover:not(:disabled) {
+      background-color: color.adjust($bg-dark, $lightness: -10%);
+    }
+  }
+
+  &.custom-btn-none {
+    background: transparent;
+    color: inherit;
+  }
+
+  &.empty {
+    background: transparent;
+    color: inherit;
+  }
+
+  // Borderless variant
+  &.border-0 {
+    border: none;
+  }
+
+  &.custom-btn-outline {
+    background-color: transparent;
+    border: 1px solid $black-color;
+    color: $black-color;
+
+    &:hover:not(:disabled) {
+      background-color: rgba($black-color, 0.05);
+      color: color.adjust($black-color, $lightness: -10%);
+    }
+  }
+
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &.start {
+      margin-right: $spacing-xs;
+    }
+
+    &.end {
+      margin-left: $spacing-xs;
+    }
+  }
+}

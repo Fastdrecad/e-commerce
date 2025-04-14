@@ -1,53 +1,40 @@
 import { Request, Response, NextFunction } from "express";
 import { User } from "../models/user.model";
-import { EMAIL_PROVIDER, ROLES, TOKEN_TYPES } from "../constants";
+import { EMAIL_PROVIDER, ROLES, COOKIE_OPTIONS } from "../constants";
 import { keys } from "../config/keys";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { RateLimiterMemory } from "rate-limiter-flexible";
-import { sendEmail } from "../utils/email";
+import emailService from "../services/email.service";
+import tokenService from "../services/token.service";
 import { OAuth2Client } from "google-auth-library";
-import { Token } from "../models/token.model";
 import axios from "axios";
 
 if (!keys.jwt.secret) {
   throw new Error("JWT secret is not defined in environment variables!");
 }
-// Define JWT secret with fallback
-const JWT_SECRET = keys.jwt.secret;
 
 // Rate limiting configuration
 const rateLimiter = new RateLimiterMemory({
-  points: 10, // 5 attempts
+  points: 10, // 10 attempts
   duration: 60 * 60 // per 1 hour
 });
 
 // Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Generate JWT token
-const generateToken = (userId: string, type: string): string => {
-  // Add more context to the token payload
-  const payload = {
-    id: userId,
-    type,
-    // Add a random fingerprint to make tokens more unique
-    fingerprint: crypto.randomBytes(8).toString("hex"),
-    // Add timestamp for easier debugging and tracking
-    iat: Math.floor(Date.now() / 1000)
-  };
-
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: keys.jwt.tokenLife || "7d"
-  } as jwt.SignOptions);
+// Helper function to safely get ObjectId string
+const getIdString = (doc: any): string => {
+  if (doc && doc._id) {
+    return doc._id.toString();
+  }
+  throw new Error("Invalid document ID");
 };
 
-// Get token expiration time in seconds
-const getTokenExpirySeconds = (): number => {
-  // Parse the expiry string (e.g., "7d" to seconds)
-  const tokenLife = keys.jwt.tokenLife || "7d";
-  const unit = tokenLife.slice(-1);
-  const value = parseInt(tokenLife.slice(0, -1));
+// Helper function to calculate token expiry in seconds
+const getAccessTokenExpirySeconds = (): number => {
+  const expiryString = keys.jwt.accessTokenLife;
+  const unit = expiryString.slice(-1);
+  const value = parseInt(expiryString.slice(0, -1));
 
   switch (unit) {
     case "d":
@@ -59,23 +46,8 @@ const getTokenExpirySeconds = (): number => {
     case "s":
       return value; // seconds
     default:
-      return 7 * 24 * 60 * 60; // default 7 days
+      return 900; // default 15 minutes
   }
-};
-
-// Generate refresh token
-const generateRefreshToken = (userId: string): string => {
-  return jwt.sign({ id: userId }, JWT_SECRET, {
-    expiresIn: "30d" // 30 days
-  } as jwt.SignOptions);
-};
-
-// Helper function to safely get ObjectId string
-const getIdString = (doc: any): string => {
-  if (doc && doc._id) {
-    return doc._id.toString();
-  }
-  throw new Error("Invalid document ID");
 };
 
 // Auth controller class
@@ -83,7 +55,15 @@ class AuthController {
   // Register new user
   async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const { firstName, lastName, email, password } = req.body;
+      const { firstName, lastName, email, password, confirmPassword } =
+        req.body;
+
+      // Validate that passwords match
+      if (password !== confirmPassword) {
+        return res.status(400).json({
+          message: "Passwords do not match"
+        });
+      }
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
@@ -99,18 +79,15 @@ class AuthController {
         lastName,
         email,
         password,
-        provider: EMAIL_PROVIDER.Email,
-        role: ROLES.Member
+        provider: EMAIL_PROVIDER.EMAIL,
+        role: ROLES.CUSTOMER
       };
 
       const user = (await User.create(userData)) as any;
 
       // Generate verification token
-      const verificationToken = crypto.randomBytes(32).toString("hex");
-      const hashedToken = crypto
-        .createHash("sha256")
-        .update(verificationToken)
-        .digest("hex");
+      const verificationToken = tokenService.generateRandomToken();
+      const hashedToken = tokenService.hashToken(verificationToken);
 
       user.emailVerificationToken = hashedToken;
       user.emailVerificationExpires = new Date(
@@ -121,12 +98,23 @@ class AuthController {
       console.log("Email verification token (for testing):", verificationToken);
 
       // Send verification email
-      const verificationUrl = `${keys.app.clientURL}/verify-email?token=${verificationToken}`;
+      const verificationUrl = `${keys.app.clientURL}/auth/verify-email?token=${verificationToken}`;
       try {
-        await sendEmail({
+        await emailService.sendEmail({
           to: user.email,
           subject: "Email Verification",
-          text: `Please verify your email by clicking on the following link: ${verificationUrl}`
+          text: `Please verify your email by clicking on the following link: ${verificationUrl}`,
+          html: `
+            <div>
+              <h2>Email Verification</h2>
+              <p>Please verify your email by clicking the button below:</p>
+              <a href="${verificationUrl}" style="padding:10px 15px; background-color:#4CAF50; color:white; text-decoration:none; border-radius:5px;">
+                Verify My Email
+              </a>
+              <p>Or copy and paste this link in your browser: ${verificationUrl}</p>
+              <p>This link will expire in 24 hours.</p>
+            </div>
+          `
         });
         console.log("Verification email sent");
       } catch (emailError) {
@@ -137,16 +125,11 @@ class AuthController {
 
       // Generate tokens
       const userId = getIdString(user);
-      const accessToken = generateToken(userId, "access");
-      const refreshToken = generateToken(userId, "refresh");
+      const accessToken = tokenService.generateAccessToken(userId);
+      const refreshToken = tokenService.generateRefreshToken(userId);
 
       // Save refresh token
-      await Token.create({
-        user: user._id,
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-      });
+      await tokenService.saveRefreshToken(userId, refreshToken);
 
       res.status(201).json({
         message:
@@ -216,23 +199,24 @@ class AuthController {
 
       // Generate tokens
       const userId = getIdString(user);
-      const accessToken = generateToken(userId, "access");
-      const refreshToken = generateToken(userId, "refresh");
+      const accessToken = tokenService.generateAccessToken(userId);
+      const refreshToken = tokenService.generateRefreshToken(userId);
 
       // Save refresh token to database with device info for auditing
       const userAgent = req.headers["user-agent"] || "unknown";
-      await Token.create({
-        user: user._id,
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
+      await tokenService.saveRefreshToken(
+        userId,
+        refreshToken,
         userAgent,
-        ipAddress: req.ip || "unknown",
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-      });
+        req.ip || "unknown"
+      );
 
+      // Set refresh token as HTTP-only cookie
+      res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
+
+      // Only send access token in response body
       res.status(200).json({
         accessToken,
-        refreshToken,
         user: {
           id: user._id,
           firstName: user.firstName,
@@ -240,7 +224,7 @@ class AuthController {
           email: user.email,
           role: user.role
         },
-        expiresIn: getTokenExpirySeconds()
+        expiresIn: getAccessTokenExpirySeconds()
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -251,7 +235,8 @@ class AuthController {
   // Refresh token
   async refreshToken(req: Request, res: Response, next: NextFunction) {
     try {
-      const { refreshToken } = req.body;
+      // Get refresh token from cookie instead of request body
+      const refreshToken = req.cookies.refreshToken;
 
       if (!refreshToken) {
         return res.status(401).json({
@@ -260,13 +245,11 @@ class AuthController {
       }
 
       // Check if token exists in database and is valid
-      const tokenDoc = await Token.findOne({
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
-        expiresAt: { $gt: new Date() }
-      });
+      const tokenDoc = await tokenService.findRefreshToken(refreshToken);
 
       if (!tokenDoc) {
+        // Clear the invalid cookie
+        res.clearCookie("refreshToken");
         return res.status(401).json({
           message: "Invalid or expired refresh token"
         });
@@ -274,16 +257,17 @@ class AuthController {
 
       // Verify JWT refresh token
       try {
-        const decoded = jwt.verify(refreshToken, JWT_SECRET) as {
-          id: string;
-          type: string;
-        };
+        const decoded = tokenService.verifyToken(refreshToken);
+        if (!decoded) {
+          throw new Error("Invalid token");
+        }
 
         // Find user
         const user = await User.findById(decoded.id);
         if (!user) {
-          // Delete invalid token
-          await Token.deleteOne({ _id: tokenDoc._id });
+          // Delete invalid token and clear cookie
+          await tokenService.deleteRefreshToken(refreshToken);
+          res.clearCookie("refreshToken");
           return res.status(401).json({
             message: "Invalid refresh token"
           });
@@ -291,26 +275,30 @@ class AuthController {
 
         // Generate new tokens
         const userId = getIdString(user);
-        const accessToken = generateToken(userId, "access");
-        const newRefreshToken = generateToken(userId, "refresh");
+        const accessToken = tokenService.generateAccessToken(userId);
+        const newRefreshToken = tokenService.generateRefreshToken(userId);
 
         // Implement token rotation (delete old token, create new one)
-        await Token.deleteOne({ _id: tokenDoc._id });
-        await Token.create({
-          user: user._id,
-          token: newRefreshToken,
-          type: TOKEN_TYPES.REFRESH,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-        });
+        await tokenService.deleteRefreshToken(refreshToken);
+        await tokenService.saveRefreshToken(
+          userId,
+          newRefreshToken,
+          req.headers["user-agent"] || "unknown",
+          req.ip || "unknown"
+        );
 
+        // Set new refresh token as HTTP-only cookie
+        res.cookie("refreshToken", newRefreshToken, COOKIE_OPTIONS);
+
+        // Only send access token in response body
         res.status(200).json({
           accessToken,
-          refreshToken: newRefreshToken,
-          expiresIn: getTokenExpirySeconds()
+          expiresIn: getAccessTokenExpirySeconds()
         });
       } catch (error) {
-        // JWT verification failed
-        await Token.deleteOne({ _id: tokenDoc._id });
+        // JWT verification failed, clear cookie
+        await tokenService.deleteRefreshToken(refreshToken);
+        res.clearCookie("refreshToken");
         return res.status(401).json({
           message: "Invalid refresh token"
         });
@@ -325,11 +313,31 @@ class AuthController {
     try {
       const { email } = req.body;
 
-      const user = (await User.findOne({ email })) as any;
+      if (!email) {
+        return res.status(400).json({
+          message: "Email is required"
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          message: "Invalid email format"
+        });
+      }
+
+      // Find user with case-insensitive email
+      const user = (await User.findOne({ email: email.toLowerCase() })) as any;
       if (!user) {
         return res.status(404).json({
           message: "User not found"
         });
+      }
+
+      // Ensure provider is set correctly
+      if (!user.provider) {
+        user.provider = EMAIL_PROVIDER.EMAIL;
       }
 
       // Generate reset token
@@ -342,10 +350,22 @@ class AuthController {
       // Send reset email
       const resetUrl = `${keys.app.clientURL}/reset-password/${resetToken}`;
       try {
-        await sendEmail({
+        await emailService.sendEmail({
           to: user.email,
           subject: "Password Reset",
-          text: `Click this link to reset your password: ${resetUrl}`
+          text: `Click this link to reset your password: ${resetUrl}`,
+          html: `
+            <div>
+              <h2>Password Reset Request</h2>
+              <p>You requested a password reset. Click the button below to reset your password:</p>
+              <a href="${resetUrl}" style="padding:10px 15px; background-color:#2196F3; color:white; text-decoration:none; border-radius:5px;">
+                Reset Password
+              </a>
+              <p>Or copy and paste this link in your browser: ${resetUrl}</p>
+              <p>This link will expire in 1 hour.</p>
+              <p>If you didn't request this, please ignore this email.</p>
+            </div>
+          `
         });
       } catch (emailError) {
         console.error("Email sending error:", emailError);
@@ -375,6 +395,7 @@ class AuthController {
         ...(process.env.NODE_ENV === "development" && { devToken: resetToken })
       });
     } catch (error) {
+      console.error("Error in forgot password:", error);
       next(error);
     }
   }
@@ -422,11 +443,15 @@ class AuthController {
   // Verify email
   async verifyEmail(req: Request, res: Response, next: NextFunction) {
     try {
+      console.log("Received verification request with params:", req.params);
       const { token } = req.params;
 
-      if (!token) {
+      if (!token || typeof token !== "string") {
+        console.log("Token validation failed:", { token, type: typeof token });
         return res.status(400).json({
-          message: "Verification token is required"
+          message: "Verification token is required",
+          received: token,
+          type: typeof token
         });
       }
 
@@ -446,10 +471,13 @@ class AuthController {
       })) as any;
 
       if (!user) {
+        console.log("No user found with token or token expired");
         return res.status(400).json({
           message: "Invalid or expired verification token"
         });
       }
+
+      console.log("Found user for verification:", user.email);
 
       // Update user
       user.isEmailVerified = true;
@@ -466,10 +494,7 @@ class AuthController {
 
       // For security, auto-expire all sessions (except current) upon major account changes
       if (process.env.NODE_ENV === "production") {
-        await Token.deleteMany({
-          user: user._id,
-          type: TOKEN_TYPES.REFRESH
-        });
+        await tokenService.deleteAllUserRefreshTokens(user._id);
       }
 
       res.status(200).json({
@@ -483,211 +508,35 @@ class AuthController {
     }
   }
 
-  // Google authentication
-  async googleAuth(req: Request, res: Response, next: NextFunction) {
+  // Check if email exists
+  async checkEmailExists(req: Request, res: Response, next: NextFunction) {
     try {
-      const { tokenId } = req.body;
+      const { email } = req.query;
 
-      const ticket = await googleClient.verifyIdToken({
-        idToken: tokenId,
-        audience: process.env.GOOGLE_CLIENT_ID
-      });
-
-      const payload = ticket.getPayload();
-      if (!payload) {
+      if (!email || typeof email !== "string") {
         return res.status(400).json({
-          message: "Invalid Google token"
+          message: "Email parameter is required"
         });
       }
 
-      const { email, given_name, family_name, sub } = payload;
-
-      // Generate a strong password
-      const strongPassword = `Google${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
-
-      // Find or create user with proper casting
-      let user = (await User.findOne({ email })) as any;
-      if (!user) {
-        user = (await User.create({
-          firstName: given_name,
-          lastName: family_name,
-          email,
-          password: strongPassword,
-          provider: EMAIL_PROVIDER.Google,
-          googleId: sub,
-          isEmailVerified: true
-        })) as any;
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          message: "Invalid email format"
+        });
       }
 
-      // Generate tokens
-      const userId = getIdString(user);
-      const accessToken = generateToken(userId, "access");
-      const refreshToken = generateToken(userId, "refresh");
+      // Find if user exists
+      const user = await User.findOne({ email: email.toLowerCase() });
 
-      // Save refresh token to database
-      await Token.create({
-        user: user._id,
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-      });
-
+      // Return exists: true/false without revealing additional user information for security
       res.status(200).json({
-        accessToken,
-        refreshToken,
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          role: user.role
-        },
-        expiresIn: getTokenExpirySeconds()
+        exists: !!user,
+        isVerified: user ? user.isEmailVerified : false
       });
     } catch (error) {
-      next(error);
-    }
-  }
-
-  // Facebook authentication
-  async facebookAuth(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { accessToken: fbAccessToken, userID } = req.body;
-
-      // Verify Facebook token
-      try {
-        const { data } = await axios.get(
-          `https://graph.facebook.com/v12.0/${userID}`,
-          {
-            params: {
-              fields: "id,email,first_name,last_name",
-              access_token: fbAccessToken
-            }
-          }
-        );
-
-        if (!data.email) {
-          return res.status(400).json({
-            message: "Could not get email from Facebook"
-          });
-        }
-
-        // Generate a strong password
-        const strongPassword = `Facebook${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
-
-        // Find or create user with proper casting
-        let user = (await User.findOne({ email: data.email })) as any;
-        if (!user) {
-          user = (await User.create({
-            firstName: data.first_name,
-            lastName: data.last_name,
-            email: data.email,
-            password: strongPassword,
-            provider: EMAIL_PROVIDER.Facebook,
-            facebookId: data.id,
-            isEmailVerified: true
-          })) as any;
-        }
-
-        // Generate tokens
-        const userId = getIdString(user);
-        const accessToken = generateToken(userId, "access");
-        const refreshToken = generateToken(userId, "refresh");
-
-        // Save refresh token to database
-        await Token.create({
-          user: user._id,
-          token: refreshToken,
-          type: TOKEN_TYPES.REFRESH,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-        });
-
-        res.status(200).json({
-          accessToken,
-          refreshToken,
-          user: {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            role: user.role
-          },
-          expiresIn: getTokenExpirySeconds()
-        });
-      } catch (error) {
-        console.error("Facebook API error:", error);
-        return res.status(400).json({
-          message: "Error validating Facebook credentials"
-        });
-      }
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  // Apple authentication
-  async appleAuth(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { token, firstName, lastName, email } = req.body;
-
-      if (!email) {
-        return res.status(400).json({
-          message: "Email is required for Apple authentication"
-        });
-      }
-
-      // Generate a strong password
-      const strongPassword = `Apple${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
-
-      // In a production app, you would verify the Apple token here
-      // using the 'jsonwebtoken' library and Apple's public keys
-      // See: https://developer.apple.com/documentation/sign_in_with_apple/generate_and_validate_tokens
-
-      // Find or create user
-      let user = (await User.findOne({ email })) as any;
-
-      if (!user) {
-        user = (await User.create({
-          firstName: firstName || "Apple",
-          lastName: lastName || "User",
-          email,
-          password: strongPassword,
-          provider: EMAIL_PROVIDER.Apple,
-          appleId: token, // Store a unique identifier from Apple
-          isEmailVerified: true
-        })) as any;
-      } else if (user.provider !== EMAIL_PROVIDER.Apple) {
-        // Update the user's provider if they were previously using a different method
-        user.provider = EMAIL_PROVIDER.Apple;
-        await user.save();
-      }
-
-      // Generate tokens
-      const userId = getIdString(user);
-      const accessToken = generateToken(userId, "access");
-      const refreshToken = generateToken(userId, "refresh");
-
-      // Save refresh token to database
-      await Token.create({
-        user: user._id,
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-      });
-
-      res.status(200).json({
-        accessToken,
-        refreshToken,
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          role: user.role
-        },
-        expiresIn: getTokenExpirySeconds()
-      });
-    } catch (error) {
+      console.error("Error checking email existence:", error);
       next(error);
     }
   }
@@ -695,16 +544,16 @@ class AuthController {
   // Logout user
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      const { refreshToken } = req.body;
+      // Get refresh token from cookie
+      const refreshToken = req.cookies.refreshToken;
 
-      if (!refreshToken) {
-        return res.status(400).json({
-          message: "Refresh token is required"
-        });
+      if (refreshToken) {
+        // Delete the refresh token from database
+        await tokenService.deleteRefreshToken(refreshToken);
       }
 
-      // Delete the refresh token from database
-      await Token.deleteOne({ token: refreshToken });
+      // Clear the cookie
+      res.clearCookie("refreshToken");
 
       res.status(200).json({
         message: "Logout successful"
@@ -739,11 +588,8 @@ class AuthController {
       }
 
       // Generate new verification token
-      const verificationToken = crypto.randomBytes(32).toString("hex");
-      const hashedToken = crypto
-        .createHash("sha256")
-        .update(verificationToken)
-        .digest("hex");
+      const verificationToken = tokenService.generateRandomToken();
+      const hashedToken = tokenService.hashToken(verificationToken);
 
       user.emailVerificationToken = hashedToken;
       user.emailVerificationExpires = new Date(
@@ -754,12 +600,23 @@ class AuthController {
       console.log("New verification token (for testing):", verificationToken);
 
       // Send verification email
-      const verificationUrl = `${keys.app.clientURL}/verify-email?token=${verificationToken}`;
+      const verificationUrl = `${keys.app.clientURL}/auth/verify-email?token=${verificationToken}`;
       try {
-        await sendEmail({
+        await emailService.sendEmail({
           to: user.email,
           subject: "Email Verification",
-          text: `Please verify your email by clicking on the following link: ${verificationUrl}`
+          text: `Please verify your email by clicking on the following link: ${verificationUrl}`,
+          html: `
+            <div>
+              <h2>Email Verification</h2>
+              <p>Please verify your email by clicking the button below:</p>
+              <a href="${verificationUrl}" style="padding:10px 15px; background-color:#4CAF50; color:white; text-decoration:none; border-radius:5px;">
+                Verify My Email
+              </a>
+              <p>Or copy and paste this link in your browser: ${verificationUrl}</p>
+              <p>This link will expire in 24 hours.</p>
+            </div>
+          `
         });
         console.log("Verification email sent");
       } catch (emailError) {
@@ -773,7 +630,7 @@ class AuthController {
           return res.status(200).json({
             message: "Verification email would be sent (development mode)",
             verificationToken,
-            verificationUrl: `${keys.app.clientURL}/verify-email?token=${verificationToken}`
+            verificationUrl: `${keys.app.clientURL}/auth/verify-email?token=${verificationToken}`
           });
         }
 
@@ -827,20 +684,18 @@ class AuthController {
 
       // Generate tokens
       const userId = getIdString(user);
-      const accessToken = generateToken(userId, "access");
-      const refreshToken = generateToken(userId, "refresh");
+      const accessToken = tokenService.generateAccessToken(userId);
+      const refreshToken = tokenService.generateRefreshToken(userId);
 
       // Save refresh token to database
-      await Token.create({
-        user: user._id,
-        token: refreshToken,
-        type: TOKEN_TYPES.REFRESH,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-      });
+      await tokenService.saveRefreshToken(userId, refreshToken);
 
+      // Set refresh token as HTTP-only cookie
+      res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
+
+      // Only send access token in response body
       res.status(200).json({
         accessToken,
-        refreshToken,
         user: {
           id: user._id,
           firstName: user.firstName,
@@ -848,8 +703,261 @@ class AuthController {
           email: user.email,
           role: user.role
         },
-        expiresIn: getTokenExpirySeconds(),
+        expiresIn: getAccessTokenExpirySeconds(),
         mockInfo: "This is a mock social auth response for development testing"
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Google authentication
+  async googleAuth(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { tokenId, access_token } = req.body;
+
+      // Use the token that's available (tokenId for web client, access_token for mobile/react app)
+      const token = tokenId || access_token;
+
+      if (!token) {
+        return res.status(400).json({
+          message: "No valid token provided"
+        });
+      }
+
+      let userInfo;
+      let email, given_name, family_name, sub;
+
+      try {
+        if (tokenId) {
+          // Verify ID token with Google
+          const ticket = await googleClient.verifyIdToken({
+            idToken: tokenId,
+            audience: process.env.GOOGLE_CLIENT_ID
+          });
+
+          const payload = ticket.getPayload();
+          if (!payload) {
+            return res.status(400).json({
+              message: "Invalid Google token"
+            });
+          }
+
+          email = payload.email;
+          given_name = payload.given_name;
+          family_name = payload.family_name;
+          sub = payload.sub;
+        } else {
+          // Use the access token to get user info
+          const response = await fetch(
+            `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`
+          );
+          userInfo = await response.json();
+
+          if (!userInfo || userInfo.error) {
+            return res.status(400).json({
+              message: "Invalid Google access token",
+              error: userInfo?.error || "Unknown error"
+            });
+          }
+
+          email = userInfo.email;
+          given_name = userInfo.given_name;
+          family_name = userInfo.family_name;
+          sub = userInfo.sub;
+        }
+      } catch (error) {
+        console.error("Google token validation error:", error);
+        return res.status(400).json({
+          message: "Error validating Google token",
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      if (!email) {
+        return res.status(400).json({
+          message: "Email not provided by Google"
+        });
+      }
+
+      // Generate a strong password
+      const strongPassword = `Google${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
+
+      // Find or create user with proper casting
+      let user = (await User.findOne({ email })) as any;
+      if (!user) {
+        user = (await User.create({
+          firstName: given_name,
+          lastName: family_name,
+          email,
+          password: strongPassword,
+          provider: EMAIL_PROVIDER.GOOGLE,
+          googleId: sub,
+          isEmailVerified: true
+        })) as any;
+      }
+
+      // Generate tokens
+      const userId = getIdString(user);
+      const accessToken = tokenService.generateAccessToken(userId);
+      const refreshToken = tokenService.generateRefreshToken(userId);
+
+      // Save refresh token to database
+      await tokenService.saveRefreshToken(userId, refreshToken);
+
+      // Set refresh token as HTTP-only cookie
+      res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
+
+      // Only send access token in response body
+      res.status(200).json({
+        accessToken,
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role
+        },
+        expiresIn: getAccessTokenExpirySeconds()
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Facebook authentication
+  async facebookAuth(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { accessToken: fbAccessToken, userID } = req.body;
+
+      // Verify Facebook token
+      try {
+        const { data } = await axios.get(
+          `https://graph.facebook.com/v12.0/${userID}`,
+          {
+            params: {
+              fields: "id,email,first_name,last_name",
+              access_token: fbAccessToken
+            }
+          }
+        );
+
+        if (!data.email) {
+          return res.status(400).json({
+            message: "Could not get email from Facebook"
+          });
+        }
+
+        // Generate a strong password
+        const strongPassword = `Facebook${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
+
+        // Find or create user with proper casting
+        let user = (await User.findOne({ email: data.email })) as any;
+        if (!user) {
+          user = (await User.create({
+            firstName: data.first_name,
+            lastName: data.last_name,
+            email: data.email,
+            password: strongPassword,
+            provider: EMAIL_PROVIDER.FACEBOOK,
+            facebookId: data.id,
+            isEmailVerified: true
+          })) as any;
+        }
+
+        // Generate tokens
+        const userId = getIdString(user);
+        const accessToken = tokenService.generateAccessToken(userId);
+        const refreshToken = tokenService.generateRefreshToken(userId);
+
+        // Save refresh token to database
+        await tokenService.saveRefreshToken(userId, refreshToken);
+
+        // Set refresh token as HTTP-only cookie
+        res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
+
+        // Only send access token in response body
+        res.status(200).json({
+          accessToken,
+          user: {
+            id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: user.role
+          },
+          expiresIn: getAccessTokenExpirySeconds()
+        });
+      } catch (error) {
+        console.error("Facebook API error:", error);
+        return res.status(400).json({
+          message: "Error validating Facebook credentials"
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Apple authentication
+  async appleAuth(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token, firstName, lastName, email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          message: "Email is required for Apple authentication"
+        });
+      }
+
+      // Generate a strong password
+      const strongPassword = `Apple${Math.floor(Math.random() * 10000)}!${Date.now().toString().slice(-4)}`;
+
+      // In a production app, you would verify the Apple token here
+      // using the 'jsonwebtoken' library and Apple's public keys
+      // See: https://developer.apple.com/documentation/sign_in_with_apple/generate_and_validate_tokens
+
+      // Find or create user
+      let user = (await User.findOne({ email })) as any;
+
+      if (!user) {
+        user = (await User.create({
+          firstName: firstName || "Apple",
+          lastName: lastName || "User",
+          email,
+          password: strongPassword,
+          provider: EMAIL_PROVIDER.APPLE,
+          appleId: token, // Store a unique identifier from Apple
+          isEmailVerified: true
+        })) as any;
+      } else if (user.provider !== EMAIL_PROVIDER.APPLE) {
+        // Update the user's provider if they were previously using a different method
+        user.provider = EMAIL_PROVIDER.APPLE;
+        await user.save();
+      }
+
+      // Generate tokens
+      const userId = getIdString(user);
+      const accessToken = tokenService.generateAccessToken(userId);
+      const refreshToken = tokenService.generateRefreshToken(userId);
+
+      // Save refresh token to database
+      await tokenService.saveRefreshToken(userId, refreshToken);
+
+      // Set refresh token as HTTP-only cookie
+      res.cookie("refreshToken", refreshToken, COOKIE_OPTIONS);
+
+      // Only send access token in response body
+      res.status(200).json({
+        accessToken,
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role
+        },
+        expiresIn: getAccessTokenExpirySeconds()
       });
     } catch (error) {
       next(error);
